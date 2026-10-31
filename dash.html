@@ -1,0 +1,139 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>سونيك داش</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;direction:rtl;background:#02061a}
+body{display:flex;align-items:center;justify-content:center;flex-direction:column;color:#eaf2ff}
+#app{width:100%;max-width:420px;padding:10px}
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:4px 2px 8px}
+.tt{font:900 17px Arial;color:#58c7ff}
+.tt small{display:block;font:700 8px Arial;color:#7a9cc8}
+.hrs{display:flex;gap:6px}
+.hr{background:rgba(0,0,0,.4);border:1px solid rgba(88,199,255,.3);border-radius:9px;padding:3px 9px;text-align:center;min-width:48px}
+.hr i{display:block;font:700 8px Arial;font-style:normal;color:#7a9cc8}
+.hr b{font:900 13px Arial;color:#ffd75e}
+.gw{position:relative;border:2px solid rgba(88,199,255,.3);border-radius:14px;overflow:hidden;background:#000;direction:ltr}
+canvas{width:100%;display:block;touch-action:none}
+.pads{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}
+.pd{height:54px;border:2px solid rgba(255,255,255,.18);border-radius:14px;font:900 15px Arial;color:#fff;background:linear-gradient(#58c7ff,#1f7fd6 60%,#0a3a6e);box-shadow:0 4px 0 rgba(0,0,0,.5)}
+.pd:active{transform:translateY(3px);box-shadow:none;filter:brightness(1.4)}
+.hint{text-align:center;font:600 10px Arial;color:#7a9cc8;margin-top:8px}
+</style></head><body>
+<div id="app">
+<div class="hdr"><div class="tt">🌀 سونيك داش<small>اقفز فوق العوائق واجمع الحلقات</small></div>
+<div class="hrs"><div class="hr"><i>الحلقات</i><b id="rg">0</b></div><div class="hr"><i>النقاط</i><b id="sc">0</b></div><div class="hr"><i>الأفضل</i><b id="bs">0</b></div></div></div>
+<div class="gw"><canvas id="cv" width="400" height="260"></canvas></div>
+<div class="pads"><button class="pd" id="jumpB">⤒ قفز</button></div>
+<div class="hint">المس الزر أو الشاشة للقفز · المس للبدء من جديد بعد الخسارة</div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('cv'),x=cv.getContext('2d'),W=400,H=260,DPR=2;
+cv.width=W*DPR;cv.height=H*DPR;x.scale(DPR,DPR);
+var rgEl=document.getElementById('rg'),scEl=document.getElementById('sc'),bsEl=document.getElementById('bs');
+var BEST=0;try{BEST=parseInt(localStorage.getItem('dash_best')||'0',10)||0}catch(e){}
+bsEl.textContent=BEST;
+function saveBest(){try{localStorage.setItem('dash_best',String(BEST))}catch(e){}}
+
+var AC=null;
+function ac(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return null}}if(AC&&AC.state==='suspended')try{AC.resume()}catch(e){}return AC}
+function tone(f,d,t,v,at,sl){var a=AC;if(!a)return;try{var n=a.currentTime+(at||0),o=a.createOscillator(),g=a.createGain();o.type=t||'square';o.frequency.setValueAtTime(f,n);if(sl)o.frequency.exponentialRampToValueAtTime(sl,n+d);g.gain.setValueAtTime(v||.1,n);g.gain.exponentialRampToValueAtTime(.0001,n+d);o.connect(g);g.connect(a.destination);o.start(n);o.stop(n+d+.03)}catch(e){}}
+function sJump(){tone(260,.12,'sine',.15,0,780)}
+function sRing(){tone(988,.05,'triangle',.14);tone(1319,.14,'sine',.12,.04)}
+function sHit(){tone(160,.3,'sawtooth',.2,0,60)}
+function sMile(){[659,784,1047].forEach(function(f,i){tone(f,.1,'square',.12,i*.08)})}
+
+var GY=210,state='ready',score=0,rings=0,best=BEST,speed=5.2,frame=0,
+px=70,py=GY,vy=0,grounded=true,rot=0,ents=[],nextSpawn=60,bestNew=false;
+
+function reset(){score=0;rings=0;speed=5.2;py=GY;vy=0;grounded=true;rot=0;ents=[];nextSpawn=60;bestNew=false;frame=0}
+
+function jump(){
+if(state==='ready'){state='play';ac();return}
+if(state==='dead'){state='ready';reset();return}
+if(state==='play'&&grounded){vy=-9.6;grounded=false;sJump()}
+}
+document.getElementById('jumpB').addEventListener('pointerdown',function(e){e.preventDefault();jump()});
+cv.addEventListener('pointerdown',function(e){e.preventDefault();jump()});
+
+function spawnEnt(){
+var r=Math.random();
+if(r<.55) ents.push({type:'spike',x:W+10,w:20,h:26});
+else ents.push({type:'ring',x:W+10,y:GY-40-Math.random()*40,r:9});
+}
+
+function update(){
+if(state!=='play')return;
+frame++;
+speed=5.2+Math.min(5,score/90);
+if(frame>=nextSpawn){spawnEnt();nextSpawn=frame+Math.max(38,70-score/4)}
+vy+=.55;py+=vy;
+if(py>=GY){py=GY;vy=0;if(!grounded)grounded=true}
+rot+=speed*.09;
+for(var i=ents.length-1;i>=0;i--){
+var e=ents[i];e.x-=speed;
+if(e.type==='spike'){
+var hit=px+14>e.x-e.w/2&&px-14<e.x+e.w/2&&py>=GY-e.h+10;
+if(hit){die();return}
+}else{
+var dx=px-e.x,dy=py-16-e.y,d=Math.sqrt(dx*dx+dy*dy);
+if(d<24){ents.splice(i,1);rings++;score+=5;rgEl.textContent=rings;sRing();
+if(rings%50===0)sMile();continue}
+}
+if(e.x<-40)ents.splice(i,1);
+}
+score+=Math.round(speed/5);
+scEl.textContent=score;
+}
+
+function die(){
+state='dead';sHit();
+if(score>best){best=score;bestNew=true;bsEl.textContent=best;saveBest()}
+}
+
+function rr(x0,y0,w,h,r){x.beginPath();x.moveTo(x0+r,y0);x.arcTo(x0+w,y0,x0+w,y0+h,r);x.arcTo(x0+w,y0+h,x0,y0+h,r);x.arcTo(x0,y0+h,x0,y0,r);x.arcTo(x0,y0,x0+w,y0,r);x.closePath()}
+
+function draw(){
+var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#071538');g.addColorStop(1,'#02061a');
+x.fillStyle=g;x.fillRect(0,0,W,H);
+x.strokeStyle='rgba(88,199,255,.35)';x.lineWidth=2;
+x.beginPath();x.moveTo(0,GY+22);x.lineTo(W,GY+22);x.stroke();
+x.fillStyle='rgba(88,199,255,.08)';x.fillRect(0,GY+22,W,H-GY-22);
+
+ents.forEach(function(e){
+if(e.type==='spike'){
+x.fillStyle='#ff5a6e';x.beginPath();
+x.moveTo(e.x-e.w/2,GY+22);x.lineTo(e.x,GY+22-e.h);x.lineTo(e.x+e.w/2,GY+22);x.closePath();x.fill();
+}else{
+x.save();x.translate(e.x,e.y);x.strokeStyle='#ffd75e';x.lineWidth=4;x.beginPath();x.arc(0,0,9,0,7);x.stroke();x.restore();
+}});
+
+x.save();x.translate(px,py);x.rotate(grounded?0:rot*.03);
+x.fillStyle='#2f7fd6';x.beginPath();x.arc(0,0,15,0,7);x.fill();
+x.fillStyle='#eaf2ff';x.beginPath();x.arc(4,-4,5,0,7);x.fill();
+x.fillStyle='#061024';x.beginPath();x.arc(5,-5,2.4,0,7);x.fill();
+x.restore();
+
+if(state==='ready'){
+x.fillStyle='rgba(2,8,26,.55)';x.fillRect(0,0,W,H);x.textAlign='center';
+x.font='900 24px Arial';x.fillStyle='#58c7ff';x.fillText('🌀 سونيك داش',W/2,100);
+if(BEST>0){x.font='bold 11px Arial';x.fillStyle='#ffd75e';x.fillText('الأفضل: '+BEST,W/2,124)}
+x.font='700 13px Arial';x.fillStyle='#fff';x.fillText('المس للبدء ▶️',W/2,150);
+x.textAlign='left';
+}
+if(state==='dead'){
+x.fillStyle='rgba(2,8,26,.6)';x.fillRect(0,0,W,H);x.textAlign='center';
+x.font='900 22px Arial';x.fillStyle='#ff8aa0';x.fillText('انتهت اللعبة 💥',W/2,100);
+x.font='bold 12px Arial';x.fillStyle='#eaf2ff';x.fillText('النقاط: '+score+' · الحلقات: '+rings,W/2,126);
+x.fillStyle=bestNew?'#ffd75e':'#9fd8ff';x.font='900 12px Arial';
+x.fillText(bestNew?'★ رقم قياسي جديد: '+best+' ★':'الأفضل: '+best,W/2,148);
+x.font='700 11px Arial';x.fillStyle='#fff';x.fillText('المس لإعادة اللعب 🔄',W/2,174);
+x.textAlign='left';
+}
+}
+
+function loop(){update();draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+})();
+</script></body></html>
